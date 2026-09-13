@@ -40,6 +40,22 @@ swarm.join(SWARM_TOPIC, { announce: true, lookup: true }).ready().then(() => {
   log('swarm did not become ready (falling back to local-only mode):', e && e.message);
 });
 
+// --- DEBUG INSTRUMENTATION: remove once pairing works ---
+swarm.on('connection', (peer, info) => {
+  log(`[debug] swarm CONNECTION event — peer ${String(peer.id).slice(0, 8)}`, info || '');
+});
+swarm.on('nat', () => {
+  log(`[debug] swarm NAT event — natType is now: ${swarm.natType}`);
+});
+swarm.on('disconnect', (peerId) => {
+  log(`[debug] swarm DISCONNECT event — peer ${String(peerId).slice(0, 8)}`);
+});
+setInterval(() => {
+  const count = swarm.peers ? swarm.peers.length : 'unknown';
+  log(`[debug] swarm.peers.length = ${count}, ready = ${swarmReady}, natType = ${swarm.natType}`);
+}, 5000);
+// --- END DEBUG INSTRUMENTATION ---
+
 const remoteFreeSessions = new Map();
 const REMOTE_SESSION_TTL_MS = 15000;
 
@@ -339,7 +355,7 @@ function serveStaticFile(req, res) {
   let urlPath = decodeURIComponent(req.url.split('?')[0]);
   if (urlPath === '/') urlPath = '/index.html';
 
-  const ALLOWED = ['/index.html','/debug.html'];
+  const ALLOWED = ['/index.html'];
   if (!ALLOWED.includes(urlPath)) {
     res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
     res.end('Not found');
@@ -477,4 +493,4 @@ function shutdown() {
 }
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
-          
+      
