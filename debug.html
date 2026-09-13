@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SetoLive — Debug Console</title>
+<style>
+  :root{
+    --bg:#0b0d10; --panel:#12151a; --line:#22262d; --text:#e6e8eb; --dim:#8a919c;
+    --ok:#3ddc84; --warn:#ffb454; --bad:#ff5d5d; --accent:#5aa2ff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px}
+  header{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  header h1{font-size:14px;margin:0;font-weight:600;color:var(--accent)}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--dim);flex-shrink:0}
+  .dot.ok{background:var(--ok);box-shadow:0 0 6px var(--ok)}
+  .dot.bad{background:var(--bad);box-shadow:0 0 6px var(--bad)}
+  .dot.warn{background:var(--warn);box-shadow:0 0 6px var(--warn)}
+  #status{color:var(--dim)}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line)}
+  @media (max-width:720px){.grid{grid-template-columns:1fr}}
+  .panel{background:var(--panel);padding:12px 14px;min-height:0}
+  .panel h2{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);margin:0 0 8px}
+  input,button,select{font-family:inherit;font-size:13px;background:#1a1e24;border:1px solid var(--line);color:var(--text);border-radius:6px;padding:7px 10px}
+  button{cursor:pointer;background:#1e2530}
+  button:hover{background:#262e3b}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  button.primary{background:var(--accent);color:#04101f;border-color:var(--accent);font-weight:600}
+  button.danger{background:#3a1616;border-color:#5a2020;color:#ff9a9a}
+  input{flex:1;min-width:120px}
+  #log{height:260px;overflow-y:auto;background:#000;border:1px solid var(--line);border-radius:6px;padding:8px;font-size:12px;line-height:1.5}
+  #log div{white-space:pre-wrap;word-break:break-all;border-bottom:1px solid #14171b;padding:2px 0}
+  .tag{display:inline-block;padding:0 5px;border-radius:3px;margin-right:6px;font-size:10px;font-weight:700}
+  .tag.recv{background:#123a2a;color:var(--ok)}
+  .tag.sent{background:#1a2a4a;color:var(--accent)}
+  .tag.sys{background:#3a2a12;color:var(--warn)}
+  .tag.err{background:#3a1616;color:var(--bad)}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-size:12px}
+  .kv b{color:var(--dim);font-weight:500}
+  .kv span{color:var(--text)}
+  textarea{width:100%;height:70px;background:#1a1e24;border:1px solid var(--line);color:var(--text);border-radius:6px;padding:8px;font-family:inherit;font-size:12px;resize:vertical}
+  small{color:var(--dim)}
+  .msgbox{display:flex;flex-direction:column;gap:8px;height:100%}
+  #chatlog{flex:1;min-height:120px;overflow-y:auto;background:#000;border:1px solid var(--line);border-radius:6px;padding:8px}
+  #chatlog div{margin-bottom:6px}
+  .me{color:var(--accent)}
+  .peer{color:var(--ok)}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>SetoLive · Debug Console</h1>
+  <div class="row">
+    <span class="dot" id="wsDot"></span>
+    <span id="status">desconectado</span>
+  </div>
+  <div class="row" style="margin-left:auto">
+    <input id="urlInput" placeholder="wss://seu-host (vazio = este host)">
+    <button id="connectBtn" class="primary">Conectar</button>
+    <button id="disconnectBtn" class="danger" disabled>Desconectar</button>
+  </div>
+</header>
+
+<div class="grid">
+
+  <div class="panel">
+    <h2>Estado da sessão</h2>
+    <div class="kv">
+      <b>WebSocket</b><span id="kvWs">—</span>
+      <b>Session ID</b><span id="kvSession">—</span>
+      <b>Pareado</b><span id="kvMatched">não</span>
+      <b>Peer ID</b><span id="kvPeer">—</span>
+      <b>Sou iniciador</b><span id="kvInitiator">—</span>
+      <b>Tempo desde connect</b><span id="kvUptime">—</span>
+      <b>Msgs recebidas</b><span id="kvRecvCount">0</span>
+      <b>Msgs enviadas</b><span id="kvSentCount">0</span>
+    </div>
+    <br>
+    <div class="row">
+      <button id="findBtn" disabled>find-random</button>
+      <button id="leaveBtn" disabled>leave</button>
+      <button id="pingBtn" disabled>ping (raw)</button>
+    </div>
+    <br>
+    <small>
+      Isso conecta no MESMO WebSocket que o index.html usa (mesma origem/porta do server.js),
+      e fala o protocolo exato: ready / find-random / matched / signal / leave / partner-left / no-peers-yet / already-matched / server-full.
+      Abra esta página em duas abas (ou duas máquinas/instâncias) pra ver ambos os lados ao vivo.
+    </small>
+  </div>
+
+  <div class="panel">
+    <h2>Mandar sinal manual (payload livre)</h2>
+    <textarea id="signalPayload" placeholder='{"type":"chat","text":"oi"}'></textarea>
+    <div class="row">
+      <button id="sendSignalBtn" disabled>Enviar como "signal"</button>
+    </div>
+    <br>
+    <h2>Chat rápido (usa "signal" por baixo)</h2>
+    <div class="msgbox">
+      <div id="chatlog"></div>
+      <div class="row">
+        <input id="chatInput" placeholder="mensagem..." disabled>
+        <button id="chatSendBtn" disabled>Enviar</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" style="grid-column:1/-1">
+    <h2>Log bruto (tudo que entra e sai do WebSocket)</h2>
+    <div id="log"></div>
+    <br>
+    <button id="clearLogBtn">Limpar log</button>
+  </div>
+
+</div>
+
+<script>
+let ws = null;
+let sessionId = null;
+let peerId = null;
+let isInitiator = null;
+let matched = false;
+let connectedAt = null;
+let recvCount = 0;
+let sentCount = 0;
+
+const $ = (id) => document.getElementById(id);
+const wsDot = $('wsDot');
+const statusEl = $('status');
+
+function setDot(state) {
+  wsDot.className = 'dot ' + state;
+}
+
+function fmtTime() {
+  const d = new Date();
+  return d.toTimeString().split(' ')[0] + '.' + String(d.getMilliseconds()).padStart(3,'0');
+}
+
+function logLine(tag, text) {
+  const el = document.createElement('div');
+  const tagSpan = document.createElement('span');
+  tagSpan.className = 'tag ' + tag;
+  tagSpan.textContent = tag.toUpperCase();
+  el.appendChild(tagSpan);
+  el.appendChild(document.createTextNode(`[${fmtTime()}] ${text}`));
+  $('log').appendChild(el);
+  $('log').scrollTop = $('log').scrollHeight;
+}
+
+function refreshKv() {
+  $('kvWs').textContent = ws ? (['CONNECTING','OPEN','CLOSING','CLOSED'][ws.readyState] || ws.readyState) : '—';
+  $('kvSession').textContent = sessionId || '—';
+  $('kvMatched').textContent = matched ? 'sim' : 'não';
+  $('kvPeer').textContent = peerId || '—';
+  $('kvInitiator').textContent = isInitiator === null ? '—' : (isInitiator ? 'sim' : 'não');
+  $('kvRecvCount').textContent = recvCount;
+  $('kvSentCount').textContent = sentCount;
+  $('kvUptime').textContent = connectedAt ? Math.floor((Date.now()-connectedAt)/1000) + 's' : '—';
+}
+setInterval(refreshKv, 500);
+
+function setButtonsConnected(on) {
+  $('connectBtn').disabled = on;
+  $('disconnectBtn').disabled = !on;
+  $('findBtn').disabled = !on;
+  $('leaveBtn').disabled = !on;
+  $('pingBtn').disabled = !on;
+  $('sendSignalBtn').disabled = !on;
+  $('chatInput').disabled = !on;
+  $('chatSendBtn').disabled = !on;
+}
+
+function send(obj) {
+  if (!ws || ws.readyState !== 1) {
+    logLine('err', 'tentei enviar mas o WebSocket não está OPEN');
+    return;
+  }
+  const str = JSON.stringify(obj);
+  ws.send(str);
+  sentCount++;
+  logLine('sent', str);
+}
+
+function connect() {
+  const custom = $('urlInput').value.trim();
+  let url;
+  if (custom) {
+    url = custom.replace(/^http/, 'ws');
+  } else {
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    url = `${proto}://${location.host}`;
+  }
+
+  logLine('sys', `conectando em ${url} ...`);
+  setDot('warn');
+  statusEl.textContent = 'conectando...';
+
+  try {
+    ws = new WebSocket(url);
+  } catch (e) {
+    logLine('err', 'falha ao criar WebSocket: ' + e.message);
+    setDot('bad');
+    statusEl.textContent = 'erro';
+    return;
+  }
+
+  ws.addEventListener('open', () => {
+    connectedAt = Date.now();
+    setDot('ok');
+    statusEl.textContent = 'conectado, aguardando "ready"...';
+    setButtonsConnected(true);
+    logLine('sys', 'WebSocket OPEN');
+  });
+
+  ws.addEventListener('message', (ev) => {
+    recvCount++;
+    logLine('recv', ev.data);
+    let msg;
+    try { msg = JSON.parse(ev.data); } catch (e) {
+      logLine('err', 'mensagem não é JSON válido');
+      return;
+    }
+    handleMessage(msg);
+  });
+
+  ws.addEventListener('close', (ev) => {
+    setDot('bad');
+    statusEl.textContent = `desconectado (code ${ev.code})`;
+    setButtonsConnected(false);
+    logLine('sys', `WebSocket CLOSE — code=${ev.code} reason="${ev.reason}" clean=${ev.wasClean}`);
+    ws = null; sessionId = null; peerId = null; isInitiator = null; matched = false; connectedAt = null;
+  });
+
+  ws.addEventListener('error', (ev) => {
+    logLine('err', 'WebSocket error event (veja o console do navegador para detalhes de rede)');
+  });
+}
+
+function disconnect() {
+  if (ws) ws.close(1000, 'debug console fechado manualmente');
+}
+
+function handleMessage(msg) {
+  switch (msg.type) {
+    case 'ready':
+      sessionId = msg.sessionId;
+      statusEl.textContent = 'pronto — sessão ativa';
+      logLine('sys', `servidor confirmou sessão: ${sessionId}`);
+      break;
+    case 'no-peers-yet':
+      logLine('sys', 'servidor: nenhum peer disponível ainda (local nem via swarm)');
+      break;
+    case 'already-matched':
+      logLine('sys', 'servidor: você já está pareado');
+      break;
+    case 'matched':
+      matched = true;
+      peerId = msg.peerId;
+      isInitiator = !!msg.initiator;
+      logLine('sys', `PAREADO com ${peerId} — iniciador: ${isInitiator}`);
+      appendChat('sys', `pareado com ${peerId}`);
+      break;
+    case 'signal':
+      logLine('sys', 'sinal recebido do peer (payload no log RECV acima)');
+      if (msg.payload && msg.payload.__debugChat) {
+        appendChat('peer', msg.payload.text);
+      }
+      break;
+    case 'partner-left':
+      matched = false;
+      logLine('sys', `peer ${peerId || ''} saiu`);
+      appendChat('sys', 'peer desconectou');
+      peerId = null; isInitiator = null;
+      break;
+    case 'server-full':
+      logLine('err', 'servidor recusou conexão: limite de sessões atingido');
+      break;
+    default:
+      logLine('sys', `tipo de mensagem desconhecido: ${msg.type}`);
+  }
+}
+
+function appendChat(who, text) {
+  const el = document.createElement('div');
+  el.className = who === 'me' ? 'me' : (who === 'peer' ? 'peer' : '');
+  el.textContent = (who === 'me' ? 'você: ' : who === 'peer' ? 'peer: ' : '') + text;
+  $('chatlog').appendChild(el);
+  $('chatlog').scrollTop = $('chatlog').scrollHeight;
+}
+
+$('connectBtn').addEventListener('click', connect);
+$('disconnectBtn').addEventListener('click', disconnect);
+$('findBtn').addEventListener('click', () => send({ type: 'find-random' }));
+$('leaveBtn').addEventListener('click', () => send({ type: 'leave' }));
+$('pingBtn').addEventListener('click', () => send({ type: '__raw_ping', ts: Date.now() }));
+$('clearLogBtn').addEventListener('click', () => $('log').innerHTML = '');
+
+$('sendSignalBtn').addEventListener('click', () => {
+  let payload;
+  try {
+    payload = JSON.parse($('signalPayload').value || '{}');
+  } catch (e) {
+    logLine('err', 'JSON inválido no campo de payload');
+    return;
+  }
+  send({ type: 'signal', payload });
+});
+
+function sendChat() {
+  const text = $('chatInput').value.trim();
+  if (!text) return;
+  send({ type: 'signal', payload: { __debugChat: true, text } });
+  appendChat('me', text);
+  $('chatInput').value = '';
+}
+$('chatSendBtn').addEventListener('click', sendChat);
+$('chatInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') sendChat(); });
+
+logLine('sys', 'console de debug carregado. Clique em "Conectar" para abrir o WebSocket.');
+</script>
+
+</body>
+  </html>
+
