@@ -339,7 +339,7 @@ function serveStaticFile(req, res) {
   let urlPath = decodeURIComponent(req.url.split('?')[0]);
   if (urlPath === '/') urlPath = '/index.html';
 
-  const ALLOWED = ['/index.html'];
+  const ALLOWED = ['/index.html','/debug.html'];
   if (!ALLOWED.includes(urlPath)) {
     res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
     res.end('Not found');
