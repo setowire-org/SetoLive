@@ -1,0 +1,12 @@
+{
+  "name": "setolive",
+  "version": "1.0.0",
+  "description": "1-on-1 live streaming with local random matching (WebSocket) + WebRTC video",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.17.0"
+  }
+}
