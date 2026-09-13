@@ -212,6 +212,13 @@ swarm.on('disconnect', (peerSwarmId) => {
 
 const sessions = new Map();
 
+function broadcastOnlineCount() {
+  const localCount = sessions.size;
+  for (const s of sessions.values()) {
+    sendToBrowser(s, { type: 'online-count', count: localCount });
+  }
+}
+
 function sendToBrowser(session, obj) {
   if (session.ws && session.ws.readyState === 1) {
     try {
@@ -389,10 +396,12 @@ wss.on('connection', (ws) => {
   };
   sessions.set(session.id, session);
   log('new tab connected, session', session.id.slice(0, 6), `(total on this instance: ${sessions.size})`);
+  broadcastOnlineCount();
 
   ws.on('pong', () => { session.isAlive = true; });
 
   ws.send(JSON.stringify({ type: 'ready', sessionId: session.id }));
+  sendToBrowser(session, { type: 'online-count', count: sessions.size });
 
   ws.on('message', (raw) => {
     const now = Date.now();
@@ -449,6 +458,7 @@ wss.on('connection', (ws) => {
     log('tab disconnected, session', session.id.slice(0, 6));
     leaveCurrentPartner(session);
     sessions.delete(session.id);
+    broadcastOnlineCount();
   });
 });
 
@@ -482,4 +492,4 @@ function shutdown() {
 }
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
-      
+                                            
