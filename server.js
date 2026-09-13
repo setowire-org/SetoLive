@@ -28,6 +28,7 @@ const bootstrap = (process.env.SETOLIVE_BOOTSTRAP || '')
 const swarm = new Swarm({
   seed: process.env.SETOLIVE_SEED || undefined,
   bootstrap,
+  diagnostics: { enabled: true, intervalMs: 10_000 },
 });
 
 let swarmReady = false;
@@ -372,7 +373,62 @@ function serveStaticFile(req, res) {
   });
 }
 
+function mapToRows(map) {
+  return [...map.entries()]
+    .sort((a, b) => (b[1].sent + b[1].received + b[1].count) - (a[1].sent + a[1].received + a[1].count))
+    .map(([key, v]) => `<tr><td>${key}</td><td>${v.sent}</td><td>${v.received}</td><td>${v.count}</td>${v.address ? `<td>${v.address}</td>` : ''}</tr>`)
+    .join('');
+}
+
+function renderDiagPage() {
+  const d = swarm._diagnostics;
+  const w = d.window;
+  const t = d.total;
+  const peerRows = swarm.peers.map(p => `<tr><td>${String(p.id).slice(0, 12)}</td></tr>`).join('');
+
+  return `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>diag</title>
+<style>
+  body{font-family:monospace;background:#111;color:#ddd;padding:16px;font-size:13px}
+  h2{color:#5af;margin-top:24px}
+  table{border-collapse:collapse;width:100%;margin-top:8px}
+  td,th{border:1px solid #333;padding:4px 8px;text-align:left}
+  .big{font-size:16px;color:#5f5}
+</style>
+</head>
+<body>
+<div class="big">
+  natType: ${swarm.natType} |
+  ext: ${swarm.publicAddress || 'nenhum'} |
+  peers conectados: ${swarm.peers.length} |
+  sessions (WS locais): ${sessions.size} |
+  swarmReady: ${swarmReady}
+</div>
+
+<h2>Peers conectados (swarm.peers)</h2>
+<table><tr><th>id</th></tr>${peerRows || '<tr><td>nenhum</td></tr>'}</table>
+
+<h2>Janela atual (últimos ~${Math.round((Date.now() - d.lastReportAt) / 1000)}s)</h2>
+<table><tr><th>tipo</th><th>enviado(bytes)</th><th>recebido(bytes)</th><th>contagem</th></tr>${mapToRows(w.byType) || '<tr><td colspan=4>nada ainda</td></tr>'}</table>
+
+<h2>Total desde o início</h2>
+<table><tr><th>tipo</th><th>enviado(bytes)</th><th>recebido(bytes)</th><th>contagem</th></tr>${mapToRows(t.byType) || '<tr><td colspan=4>nada ainda</td></tr>'}</table>
+
+<h2>Por endereço/peer (janela atual)</h2>
+<table><tr><th>peer/endereço</th><th>enviado</th><th>recebido</th><th>contagem</th><th>endereço</th></tr>${mapToRows(w.byPeer) || '<tr><td colspan=5>nada ainda</td></tr>'}</table>
+
+<p style="color:#888">atualiza sozinho a cada 3s</p>
+<script>setTimeout(() => location.reload(), 3000);</script>
+</body></html>`;
+}
+
 const server = http.createServer((req, res) => {
+  const urlPath = req.url.split('?')[0];
+  if (urlPath === '/diag') {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(renderDiagPage());
+    return;
+  }
   serveStaticFile(req, res);
 });
 
@@ -492,3 +548,4 @@ function shutdown() {
 }
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
+                                               
