@@ -3,7 +3,7 @@ const fs = require('fs');
 const http = require('http');
 const { WebSocketServer } = require('ws');
 const crypto = require('crypto');
-const Swarm = require('./setowire');
+const Swarm = require('setowire');
 
 function getArg(name, def) {
   const idx = process.argv.indexOf(`--${name}`);
