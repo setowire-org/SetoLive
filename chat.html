@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SetoLive Chat</title>
+<style>
+  body{margin:0;background:#111;color:#eee;font-family:sans-serif;display:flex;flex-direction:column;height:100vh}
+  header{padding:10px;background:#1a1a1a;text-align:center;font-size:14px;color:#8a9}
+  #log{flex:1;overflow-y:auto;padding:10px}
+  #log div{margin-bottom:8px;padding:6px 10px;border-radius:8px;max-width:75%;word-wrap:break-word}
+  .me{background:#2a5;margin-left:auto;color:#fff}
+  .peer{background:#333;margin-right:auto}
+  .sys{background:none;color:#888;font-size:12px;text-align:center;max-width:100%}
+  form{display:flex;padding:10px;background:#1a1a1a;gap:8px}
+  input{flex:1;padding:10px;border-radius:8px;border:none;font-size:14px}
+  button{padding:10px 16px;border-radius:8px;border:none;background:#2a5;color:#fff;font-weight:bold}
+  button:disabled{opacity:.4}
+</style>
+</head>
+<body>
+
+<header id="status">conectando...</header>
+<div id="log"></div>
+<form id="form">
+  <input id="input" placeholder="digite uma mensagem..." autocomplete="off" disabled>
+  <button id="sendBtn" disabled>Enviar</button>
+</form>
+
+<script>
+let ws;
+let matched = false;
+
+const logEl = document.getElementById('log');
+const statusEl = document.getElementById('status');
+const input = document.getElementById('input');
+const sendBtn = document.getElementById('sendBtn');
+const form = document.getElementById('form');
+
+function addLine(text, cls) {
+  const d = document.createElement('div');
+  d.className = cls;
+  d.textContent = text;
+  logEl.appendChild(d);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function connect() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}`);
+
+  ws.addEventListener('open', () => {
+    statusEl.textContent = 'conectado, procurando alguém...';
+  });
+
+  ws.addEventListener('message', (ev) => {
+    const msg = JSON.parse(ev.data);
+
+    if (msg.type === 'ready') {
+      ws.send(JSON.stringify({ type: 'find-random' }));
+    }
+
+    if (msg.type === 'no-peers-yet') {
+      statusEl.textContent = 'ninguém disponível ainda, tentando de novo...';
+      setTimeout(() => ws.send(JSON.stringify({ type: 'find-random' })), 2000);
+    }
+
+    if (msg.type === 'matched') {
+      matched = true;
+      statusEl.textContent = 'conectado com ' + msg.peerId;
+      addLine('--- pareado com ' + msg.peerId + ' ---', 'sys');
+      input.disabled = false;
+      sendBtn.disabled = false;
+    }
+
+    if (msg.type === 'signal' && msg.payload && msg.payload.text) {
+      addLine(msg.payload.text, 'peer');
+    }
+
+    if (msg.type === 'partner-left') {
+      matched = false;
+      statusEl.textContent = 'peer saiu, procurando outro...';
+      addLine('--- peer desconectou ---', 'sys');
+      input.disabled = true;
+      sendBtn.disabled = true;
+      ws.send(JSON.stringify({ type: 'find-random' }));
+    }
+
+    if (msg.type === 'server-full') {
+      statusEl.textContent = 'servidor cheio';
+    }
+  });
+
+  ws.addEventListener('close', () => {
+    statusEl.textContent = 'desconectado — recarregue a página';
+    input.disabled = true;
+    sendBtn.disabled = true;
+  });
+}
+
+form.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const text = input.value.trim();
+  if (!text || !matched) return;
+  ws.send(JSON.stringify({ type: 'signal', payload: { text } }));
+  addLine(text, 'me');
+  input.value = '';
+});
+
+connect();
+</script>
+
+</body>
+</html>
+
